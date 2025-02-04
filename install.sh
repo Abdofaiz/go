@@ -165,10 +165,10 @@ chown -R root:root /etc/vps_manager
 
 # Set up Go project
 print_status "Setting up Go project..."
-WORK_DIR="/root/vps_manager"
-rm -rf $WORK_DIR
-mkdir -p $WORK_DIR
-cd $WORK_DIR
+BUILD_DIR="/tmp/vps_build"
+rm -rf $BUILD_DIR
+mkdir -p $BUILD_DIR
+cd $BUILD_DIR
 
 # Create proper Go project structure
 print_status "Creating project structure..."
@@ -177,7 +177,7 @@ mkdir -p internal/config
 
 # Copy source files
 print_status "Copying source files..."
-cp /root/go/vps_manager.go .
+cp /root/go/vps_manager.go main.go
 cp -r /root/go/protocols/* internal/protocols/
 cp -r /root/go/config/* internal/config/
 
@@ -196,18 +196,20 @@ EOF
 
 # Update import paths in all Go files
 print_status "Updating import paths..."
-sed -i 's|"./protocols"|"vps_manager/internal/protocols"|g' vps_manager.go
-sed -i 's|"./config"|"vps_manager/internal/config"|g' vps_manager.go
+sed -i 's|"./protocols"|"vps_manager/internal/protocols"|g' main.go
+sed -i 's|"./config"|"vps_manager/internal/config"|g' main.go
 
 # Initialize Go module
 print_status "Initializing Go module..."
+export GO111MODULE=on
+unset GOPATH
 go mod tidy
 
 # Build the program
 print_status "Building VPS Manager..."
-if ! go build -o vps_manager .; then
+if ! CGO_ENABLED=0 go build -o vps_manager .; then
     print_error "Failed to build VPS Manager. Build output:"
-    go build -v -o vps_manager .
+    CGO_ENABLED=0 go build -v -o vps_manager .
     exit 1
 fi
 
@@ -216,6 +218,10 @@ if [ -f "vps_manager" ]; then
     print_status "Installing VPS Manager binary..."
     mv vps_manager /usr/local/bin/
     chmod +x /usr/local/bin/vps_manager
+    
+    # Clean up build directory
+    cd /root
+    rm -rf $BUILD_DIR
 else
     print_error "Build failed: binary not created"
     exit 1
