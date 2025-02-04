@@ -165,63 +165,36 @@ chown -R root:root /etc/vps_manager
 
 # Set up Go project
 print_status "Setting up Go project..."
-BUILD_DIR="/tmp/vps_build"
-rm -rf $BUILD_DIR
-mkdir -p $BUILD_DIR
-cd $BUILD_DIR
-
-# Create proper Go project structure
-print_status "Creating project structure..."
-mkdir -p internal/protocols
-mkdir -p internal/config
-
-# Copy source files
-print_status "Copying source files..."
-cp /root/go/vps_manager.go main.go
-cp -r /root/go/protocols/* internal/protocols/
-cp -r /root/go/config/* internal/config/
-
-# Create go.mod file
-print_status "Creating Go module..."
-cat > go.mod << EOF
-module vps_manager
-
-go 1.16
-
-require (
-	github.com/google/uuid v1.3.0
-	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
-)
-EOF
-
-# Update import paths in all Go files
-print_status "Updating import paths..."
-sed -i 's|"./protocols"|"vps_manager/internal/protocols"|g' main.go
-sed -i 's|"./config"|"vps_manager/internal/config"|g' main.go
+cd /root/go
 
 # Initialize Go module
 print_status "Initializing Go module..."
-export GO111MODULE=on
-unset GOPATH
-go mod tidy
+rm -f go.mod go.sum
+go mod init vps_manager
+
+# Add required dependencies
+go get github.com/google/uuid
+go get golang.org/x/crypto/bcrypt
+
+# Update import paths
+print_status "Updating import paths..."
+sed -i 's|"./protocols"|"vps_manager/protocols"|g' vps_manager.go
+sed -i 's|"./config"|"vps_manager/config"|g' vps_manager.go
 
 # Build the program
 print_status "Building VPS Manager..."
-if ! CGO_ENABLED=0 go build -o vps_manager .; then
-    print_error "Failed to build VPS Manager. Build output:"
-    CGO_ENABLED=0 go build -v -o vps_manager .
+export GO111MODULE=on
+if ! go build -o vps_manager .; then
+    print_error "Failed to build. Build output:"
+    go build -v -o vps_manager .
     exit 1
 fi
 
-# Verify and install binary
+# Install the binary
 if [ -f "vps_manager" ]; then
     print_status "Installing VPS Manager binary..."
     mv vps_manager /usr/local/bin/
     chmod +x /usr/local/bin/vps_manager
-    
-    # Clean up build directory
-    cd /root
-    rm -rf $BUILD_DIR
 else
     print_error "Build failed: binary not created"
     exit 1
