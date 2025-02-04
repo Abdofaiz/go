@@ -167,6 +167,12 @@ chown -R root:root /etc/vps_manager
 print_status "Setting up Go project..."
 cd /root/go
 
+# Set Go environment variables
+export GO111MODULE=on
+export GOPATH=""
+export GOROOT=$(go env GOROOT)
+export PATH=$PATH:$GOROOT/bin
+
 # Initialize Go module
 print_status "Initializing Go module..."
 rm -f go.mod go.sum
@@ -208,7 +214,6 @@ go mod tidy
 
 # Build the program
 print_status "Building VPS Manager..."
-export GO111MODULE=on
 if ! go build -o vps_manager .; then
 	print_error "Failed to build. Build output:"
 	go build -v -o vps_manager .
