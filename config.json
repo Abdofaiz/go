@@ -1,0 +1,38 @@
+{
+    "domain": "yourdomain.com",
+    "log_path": "/var/log/vps_manager.log",
+    "db_path": "/etc/vps_manager/users.json",
+    "protocols": {
+        "ssh": {
+            "port": 22
+        },
+        "xray": {
+            "port": 443,
+            "config_path": "/etc/xray/config.json"
+        },
+        "websocket": {
+            "port": 80,
+            "config_path": "/etc/nginx/conf.d/websocket.conf"
+        },
+        "ssl": {
+            "cert_path": "/etc/ssl/certs/vps.crt",
+            "key_path": "/etc/ssl/private/vps.key"
+        },
+        "http": {
+            "port": 8080,
+            "config_path": "/etc/nginx/conf.d/http.conf"
+        },
+        "squid": {
+            "port": 3128,
+            "passwd_file": "/etc/squid/passwd"
+        },
+        "udp": {
+            "port": 7300,
+            "config_path": "/etc/udp/config.json"
+        },
+        "dropbear": {
+            "port": 2222,
+            "config_path": "/etc/dropbear/dropbear.conf"
+        }
+    }
+} 
