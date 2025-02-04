@@ -57,17 +57,25 @@ if [ -f "/usr/local/bin/xray" ]; then
     rm -f /etc/systemd/system/xray.service
 fi
 
+# Install required dependencies
+apt install -y unzip daemon
+
 # Download and install Xray binary
 print_status "Downloading Xray..."
-XRAY_LATEST=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep "tag_name" | cut -d '"' -f 4)
-wget -q -O /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/${XRAY_LATEST}/Xray-linux-64.zip
-unzip -q /tmp/xray.zip -d /tmp/xray
-install -m 755 /tmp/xray/xray /usr/local/bin/xray
-rm -rf /tmp/xray /tmp/xray.zip
+mkdir -p /tmp/xray
+cd /tmp/xray
+wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+unzip -q Xray-linux-64.zip
+install -m 755 xray /usr/local/bin/xray
+install -m 644 geoip.dat /usr/local/share/xray/
+install -m 644 geosite.dat /usr/local/share/xray/
+cd -
+rm -rf /tmp/xray
 
-# Create directories
-mkdir -p /etc/xray
+# Create directories and set permissions
+mkdir -p /usr/local/share/xray
 mkdir -p /var/log/xray
+mkdir -p /etc/xray
 
 # Create default Xray config
 print_status "Configuring Xray..."
@@ -95,7 +103,8 @@ cat > /etc/xray/config.json << EOF
     ],
     "outbounds": [
         {
-            "protocol": "freedom"
+            "protocol": "freedom",
+            "settings": {}
         }
     ]
 }
@@ -110,10 +119,12 @@ Documentation=https://github.com/xtls
 After=network.target nss-lookup.target
 
 [Service]
+Type=simple
 User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
+Environment=XRAY_LOCATION_ASSET=/usr/local/share/xray
 ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
 Restart=on-failure
 RestartPreventExitStatus=23
