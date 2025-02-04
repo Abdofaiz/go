@@ -163,16 +163,63 @@ chmod 755 /etc/vps_manager
 chmod 755 /var/log/vps_manager
 chown -R root:root /etc/vps_manager
 
-# Create project directory and download source
-print_status "Setting up VPS Manager..."
+# Set up Go project
+print_status "Setting up Go project..."
 WORK_DIR="/root/vps_manager"
+rm -rf $WORK_DIR
 mkdir -p $WORK_DIR
 cd $WORK_DIR
 
+# Create proper Go project structure
+print_status "Creating project structure..."
+mkdir -p internal/protocols
+mkdir -p internal/config
+
+# Copy source files
+print_status "Copying source files..."
+cp /root/go/vps_manager.go .
+cp -r /root/go/protocols/* internal/protocols/
+cp -r /root/go/config/* internal/config/
+
+# Create go.mod file
+print_status "Creating Go module..."
+cat > go.mod << EOF
+module vps_manager
+
+go 1.16
+
+require (
+	github.com/google/uuid v1.3.0
+	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
+)
+EOF
+
+# Update import paths in all Go files
+print_status "Updating import paths..."
+sed -i 's|"./protocols"|"vps_manager/internal/protocols"|g' vps_manager.go
+sed -i 's|"./config"|"vps_manager/internal/config"|g' vps_manager.go
+
 # Initialize Go module
-go mod init vps_manager
-go get github.com/google/uuid
-go get golang.org/x/crypto/bcrypt
+print_status "Initializing Go module..."
+go mod tidy
+
+# Build the program
+print_status "Building VPS Manager..."
+if ! go build -o vps_manager .; then
+    print_error "Failed to build VPS Manager. Build output:"
+    go build -v -o vps_manager .
+    exit 1
+fi
+
+# Verify and install binary
+if [ -f "vps_manager" ]; then
+    print_status "Installing VPS Manager binary..."
+    mv vps_manager /usr/local/bin/
+    chmod +x /usr/local/bin/vps_manager
+else
+    print_error "Build failed: binary not created"
+    exit 1
+fi
 
 # Create config directories
 mkdir -p protocols
@@ -251,12 +298,6 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Build and install
-print_status "Building VPS Manager..."
-go build -o vps_manager
-mv vps_manager /usr/local/bin/
-chmod +x /usr/local/bin/vps_manager
 
 # Start services
 print_status "Starting services..."
