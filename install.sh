@@ -47,42 +47,32 @@ apt install -y \
 
 # Install Xray
 print_status "Installing Xray..."
-if [ -f "/usr/local/bin/xray" ]; then
-    print_status "Removing existing Xray installation..."
-    systemctl stop xray || true
-    systemctl disable xray || true
-    rm -rf /usr/local/bin/xray
-    rm -rf /etc/xray
-    rm -rf /var/log/xray
-    rm -f /etc/systemd/system/xray.service
-fi
 
-# Install required dependencies
-apt install -y unzip daemon
+# Remove existing installation
+systemctl stop xray || true
+systemctl disable xray || true
+rm -rf /usr/local/bin/xray /etc/xray /var/log/xray /usr/local/share/xray
 
-# Download and install Xray binary
-print_status "Downloading Xray..."
-mkdir -p /tmp/xray
-cd /tmp/xray
-wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-unzip -q Xray-linux-64.zip
-install -m 755 xray /usr/local/bin/xray
-install -m 644 geoip.dat /usr/local/share/xray/
-install -m 644 geosite.dat /usr/local/share/xray/
-cd -
-rm -rf /tmp/xray
-
-# Create directories and set permissions
-mkdir -p /usr/local/share/xray
-mkdir -p /var/log/xray
+# Create directories
 mkdir -p /etc/xray
+mkdir -p /var/log/xray
+mkdir -p /usr/local/share/xray
 
-# Create default Xray config
-print_status "Configuring Xray..."
+# Download and install Xray
+XRAY_VERSION="1.8.4"
+wget -q -O /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-64.zip"
+unzip -q /tmp/xray.zip -d /tmp/xray
+mv /tmp/xray/xray /usr/local/bin/
+mv /tmp/xray/geoip.dat /usr/local/share/xray/
+mv /tmp/xray/geosite.dat /usr/local/share/xray/
+rm -rf /tmp/xray /tmp/xray.zip
+chmod +x /usr/local/bin/xray
+
+# Create basic Xray config
 cat > /etc/xray/config.json << EOF
 {
     "log": {
-        "loglevel": "warning",
+        "loglevel": "info",
         "access": "/var/log/xray/access.log",
         "error": "/var/log/xray/error.log"
     },
@@ -94,68 +84,53 @@ cat > /etc/xray/config.json << EOF
                 "clients": []
             },
             "streamSettings": {
-                "network": "ws",
-                "wsSettings": {
-                    "path": "/ws"
-                }
+                "network": "tcp"
             }
         }
     ],
     "outbounds": [
         {
-            "protocol": "freedom",
-            "settings": {}
+            "protocol": "freedom"
         }
     ]
 }
 EOF
 
-# Create Xray systemd service
-print_status "Creating Xray service..."
+# Create systemd service
 cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
-Documentation=https://github.com/xtls
 After=network.target nss-lookup.target
 
 [Service]
-Type=simple
 User=root
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
-Environment=XRAY_LOCATION_ASSET=/usr/local/share/xray
 ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
 Restart=on-failure
 RestartPreventExitStatus=23
-LimitNPROC=10000
-LimitNOFILE=1000000
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 # Set permissions
-chown -R root:root /etc/xray
-chown -R root:root /var/log/xray
 chmod 644 /etc/xray/config.json
 chmod 755 /var/log/xray
+chmod 755 /usr/local/share/xray
 
-# Reload systemd and start Xray
-print_status "Starting Xray service..."
+# Start Xray
 systemctl daemon-reload
 systemctl enable xray
 systemctl restart xray
 
-# Verify Xray is running
+# Check if Xray is running
 sleep 2
-if systemctl is-active --quiet xray; then
-    print_success "Xray installed and running successfully!"
-else
-    print_error "Xray installation failed. Checking logs..."
-    journalctl -xe -u xray
+if ! systemctl is-active --quiet xray; then
+    print_error "Xray failed to start. Logs:"
+    journalctl -u xray --no-pager -n 50
     exit 1
 fi
+
+print_success "Xray installed successfully!"
 
 # Create directories
 print_status "Creating directories..."
