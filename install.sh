@@ -49,6 +49,74 @@ apt install -y \
 print_status "Installing Xray..."
 bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 
+# Create default Xray config
+print_status "Configuring Xray..."
+cat > /etc/xray/config.json << EOF
+{
+    "inbounds": [
+        {
+            "port": 443,
+            "protocol": "vmess",
+            "settings": {
+                "clients": []
+            },
+            "streamSettings": {
+                "network": "ws",
+                "wsSettings": {
+                    "path": "/ws"
+                }
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}
+EOF
+
+# Fix Xray permissions
+chown -R nobody:nogroup /etc/xray
+chmod 644 /etc/xray/config.json
+
+# Create Xray service if it doesn't exist
+if [ ! -f "/etc/systemd/system/xray.service" ]; then
+    cat > /etc/systemd/system/xray.service << EOF
+[Unit]
+Description=Xray Service
+Documentation=https://github.com/xtls
+After=network.target nss-lookup.target
+
+[Service]
+User=nobody
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
+Restart=on-failure
+RestartPreventExitStatus=23
+LimitNPROC=10000
+LimitNOFILE=1000000
+
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+
+# Reload systemd and restart Xray
+systemctl daemon-reload
+systemctl enable xray
+systemctl restart xray
+
+# Verify Xray is running
+if systemctl is-active --quiet xray; then
+    print_success "Xray installed and running successfully!"
+else
+    print_error "Xray installation failed. Check logs with: journalctl -xe -u xray"
+    exit 1
+fi
+
 # Create directories
 print_status "Creating directories..."
 mkdir -p /etc/vps_manager
@@ -165,13 +233,11 @@ systemctl daemon-reload
 systemctl enable nginx
 systemctl enable squid
 systemctl enable dropbear
-systemctl enable xray
 systemctl enable vps_manager
 
 systemctl start nginx
 systemctl start squid
 systemctl start dropbear
-systemctl start xray
 systemctl start vps_manager
 
 # Final status check

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/google/uuid"
 )
@@ -109,7 +110,17 @@ func (x *XrayManager) AddUser(username string) error {
 		}
 	}
 
-	return x.saveConfig(config)
+	if err := x.saveConfig(config); err != nil {
+		return err
+	}
+
+	// Restart Xray service
+	cmd := exec.Command("systemctl", "restart", "xray")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to restart xray service: %v", err)
+	}
+
+	return nil
 }
 
 // RemoveUser removes a user from the Xray configuration
