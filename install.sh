@@ -48,6 +48,14 @@ apt install -y \
 # Install Xray
 print_status "Installing Xray..."
 
+# Check if port 443 is in use
+if lsof -i :443 > /dev/null 2>&1; then
+    print_status "Port 443 is in use. Stopping conflicting services..."
+    systemctl stop nginx || true
+    systemctl stop apache2 || true
+    sleep 2
+fi
+
 # Install unzip if not present
 apt install -y unzip
 
@@ -74,12 +82,12 @@ if ! /usr/local/bin/xray version; then
     exit 1
 fi
 
-# Create minimal config
+# Create minimal config with a different port initially
 cat > /etc/xray/config.json << EOF
 {
     "inbounds": [
         {
-            "port": 443,
+            "port": 10085,
             "protocol": "vmess",
             "settings": {
                 "clients": []
@@ -103,6 +111,7 @@ After=network.target
 [Service]
 ExecStart=/usr/local/bin/xray run -config /etc/xray/config.json
 Restart=on-failure
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
@@ -122,6 +131,17 @@ systemctl restart xray
 sleep 2
 if systemctl is-active --quiet xray; then
     print_success "Xray installed and running successfully!"
+    
+    # Now try to switch to port 443
+    print_status "Configuring Xray for port 443..."
+    sed -i 's/"port": 10085/"port": 443/' /etc/xray/config.json
+    
+    if systemctl restart xray; then
+        print_success "Xray configured successfully on port 443"
+    else
+        print_error "Could not bind to port 443. Using alternative port 10085"
+        print_status "You can change the port later in /etc/xray/config.json"
+    fi
 else
     print_error "Xray failed to start. Logs:"
     journalctl -u xray --no-pager -n 20
