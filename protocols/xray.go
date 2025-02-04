@@ -3,7 +3,7 @@ package protocols
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"os/exec"
 
 	"github.com/google/uuid"
@@ -45,7 +45,7 @@ func NewXrayManager(port int, configPath string) *XrayManager {
 
 // loadConfig reads and parses the Xray configuration file
 func (x *XrayManager) loadConfig() (*XrayConfig, error) {
-	data, err := os.ReadFile(x.ConfigPath)
+	data, err := ioutil.ReadFile(x.ConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %v", err)
 	}
@@ -65,7 +65,7 @@ func (x *XrayManager) saveConfig(config *XrayConfig) error {
 		return fmt.Errorf("failed to marshal config: %v", err)
 	}
 
-	if err := os.WriteFile(x.ConfigPath, data, 0644); err != nil {
+	if err := ioutil.WriteFile(x.ConfigPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config: %v", err)
 	}
 

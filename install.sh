@@ -172,32 +172,57 @@ print_status "Initializing Go module..."
 rm -f go.mod go.sum
 go mod init vps_manager
 
-# Add required dependencies
-go get github.com/google/uuid
-go get golang.org/x/crypto/bcrypt
+# Create go.mod with correct version
+cat > go.mod << EOF
+module vps_manager
+
+go 1.20
+
+require (
+	github.com/google/uuid v1.3.0
+	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
+)
+EOF
 
 # Update import paths
 print_status "Updating import paths..."
 sed -i 's|"./protocols"|"vps_manager/protocols"|g' vps_manager.go
 sed -i 's|"./config"|"vps_manager/config"|g' vps_manager.go
 
+# Add ioutil imports for older Go versions
+print_status "Updating imports for compatibility..."
+find . -type f -name "*.go" -exec sed -i 's/os.ReadFile/ioutil.ReadFile/g' {} \;
+find . -type f -name "*.go" -exec sed -i 's/os.WriteFile/ioutil.WriteFile/g' {} \;
+
+# Add ioutil import to files
+for file in $(find . -type f -name "*.go"); do
+	if grep -q "ioutil\." "$file"; then
+		sed -i '1,/^import/!b;/^import/a\\t"io/ioutil"' "$file"
+	fi
+done
+
+# Download dependencies
+print_status "Downloading dependencies..."
+go mod download
+go mod tidy
+
 # Build the program
 print_status "Building VPS Manager..."
 export GO111MODULE=on
 if ! go build -o vps_manager .; then
-    print_error "Failed to build. Build output:"
-    go build -v -o vps_manager .
-    exit 1
+	print_error "Failed to build. Build output:"
+	go build -v -o vps_manager .
+	exit 1
 fi
 
 # Install the binary
 if [ -f "vps_manager" ]; then
-    print_status "Installing VPS Manager binary..."
-    mv vps_manager /usr/local/bin/
-    chmod +x /usr/local/bin/vps_manager
+	print_status "Installing VPS Manager binary..."
+	mv vps_manager /usr/local/bin/
+	chmod +x /usr/local/bin/vps_manager
 else
-    print_error "Build failed: binary not created"
-    exit 1
+	print_error "Build failed: binary not created"
+	exit 1
 fi
 
 # Create config directories
