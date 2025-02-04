@@ -47,12 +47,37 @@ apt install -y \
 
 # Install Xray
 print_status "Installing Xray..."
-bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+if [ -f "/usr/local/bin/xray" ]; then
+    print_status "Removing existing Xray installation..."
+    systemctl stop xray || true
+    systemctl disable xray || true
+    rm -rf /usr/local/bin/xray
+    rm -rf /etc/xray
+    rm -rf /var/log/xray
+    rm -f /etc/systemd/system/xray.service
+fi
+
+# Download and install Xray binary
+print_status "Downloading Xray..."
+XRAY_LATEST=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+wget -q -O /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/${XRAY_LATEST}/Xray-linux-64.zip
+unzip -q /tmp/xray.zip -d /tmp/xray
+install -m 755 /tmp/xray/xray /usr/local/bin/xray
+rm -rf /tmp/xray /tmp/xray.zip
+
+# Create directories
+mkdir -p /etc/xray
+mkdir -p /var/log/xray
 
 # Create default Xray config
 print_status "Configuring Xray..."
 cat > /etc/xray/config.json << EOF
 {
+    "log": {
+        "loglevel": "warning",
+        "access": "/var/log/xray/access.log",
+        "error": "/var/log/xray/error.log"
+    },
     "inbounds": [
         {
             "port": 443,
@@ -76,20 +101,16 @@ cat > /etc/xray/config.json << EOF
 }
 EOF
 
-# Fix Xray permissions
-chown -R nobody:nogroup /etc/xray
-chmod 644 /etc/xray/config.json
-
-# Create Xray service if it doesn't exist
-if [ ! -f "/etc/systemd/system/xray.service" ]; then
-    cat > /etc/systemd/system/xray.service << EOF
+# Create Xray systemd service
+print_status "Creating Xray service..."
+cat > /etc/systemd/system/xray.service << EOF
 [Unit]
 Description=Xray Service
 Documentation=https://github.com/xtls
 After=network.target nss-lookup.target
 
 [Service]
-User=nobody
+User=root
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
@@ -102,18 +123,26 @@ LimitNOFILE=1000000
 [Install]
 WantedBy=multi-user.target
 EOF
-fi
 
-# Reload systemd and restart Xray
+# Set permissions
+chown -R root:root /etc/xray
+chown -R root:root /var/log/xray
+chmod 644 /etc/xray/config.json
+chmod 755 /var/log/xray
+
+# Reload systemd and start Xray
+print_status "Starting Xray service..."
 systemctl daemon-reload
 systemctl enable xray
 systemctl restart xray
 
 # Verify Xray is running
+sleep 2
 if systemctl is-active --quiet xray; then
     print_success "Xray installed and running successfully!"
 else
-    print_error "Xray installation failed. Check logs with: journalctl -xe -u xray"
+    print_error "Xray installation failed. Checking logs..."
+    journalctl -xe -u xray
     exit 1
 fi
 
